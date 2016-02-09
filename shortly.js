@@ -15,6 +15,7 @@ var app = express();
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
+
 app.use(partials());
 // Parse JSON (uniform resource locators)
 app.use(bodyParser.json());
@@ -25,18 +26,57 @@ app.use(express.static(__dirname + '/public'));
 
 app.get('/', 
 function(req, res) {
-  res.render('index');
+  if(req.isLoggedIn) {
+    res.render('index');
+  }
+
+  res.redirect('/login');
 });
 
 app.get('/create', 
 function(req, res) {
-  res.render('index');
+  if(req.isLoggedIn) {
+    res.render('index');
+  }
+
+  res.redirect('/login');
+});
+
+app.get('/login', function(req, res) {
+  res.render('login');
 });
 
 app.get('/links', 
 function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.send(200, links.models);
+  if(req.isLoggedIn) {
+    Links.reset().fetch().then(function(links) {
+      res.send(200, links.models);
+    });
+  }
+
+  res.redirect('/login');
+});
+
+app.get('/signup', function(req, res) {
+  res.render('signup');
+});
+
+app.post('/signup', function(req, res) {
+  //username/pw are keys on obj
+  // console.log(req.body);
+
+  new User({ username: req.body.username }).fetch().then(function(found) {
+    if (found) {
+      res.send(200, "Username already exists.");
+    } else {
+      Users.create({
+        username: req.body.username,
+        password: req.body.password,
+      })
+      .then(function(newUser) {
+        res.send(200, "New user created");
+      });
+    }
   });
 });
 
@@ -71,6 +111,8 @@ function(req, res) {
     }
   });
 });
+
+
 
 /************************************************************/
 // Write your authentication routes here
