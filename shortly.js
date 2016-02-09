@@ -2,7 +2,7 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-
+var session = require('express-session');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -22,39 +22,61 @@ app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
+app.use(session({
+  secret: 'secret',
+  resave: false,
+  saveUninitialized: false
+}));
 
-
-app.get('/', 
-function(req, res) {
-  if(req.isLoggedIn) {
-    res.render('index');
+app.restrict = function (req, res, next) {
+  if (req.session.user) {
+    next();
+  } else {
+    req.session.error = 'Access denied!';
+    res.redirect('/login');
   }
+};
 
-  res.redirect('/login');
+app.get('/', app.restrict, function(req, res) {
+  res.render('index');
 });
 
-app.get('/create', 
-function(req, res) {
-  if(req.isLoggedIn) {
-    res.render('index');
-  }
-
-  res.redirect('/login');
+app.get('/create', app.restrict, function(req, res) {
+  res.render('index');
 });
 
 app.get('/login', function(req, res) {
+  req.session.destroy(function(err) {
+    console.log(err);
+  });  
   res.render('login');
 });
 
-app.get('/links', 
-function(req, res) {
-  if(req.isLoggedIn) {
-    Links.reset().fetch().then(function(links) {
-      res.send(200, links.models);
-    });
-  }
+app.post('/login', function(req, res) {
+  new User({ username: req.body.username }).fetch().then(function(foundUser) {
+    if (foundUser) {
+      foundUser.isSamePw(req.body.password).then(function(correctPw) {
+        if (correctPw) {
+          req.session.regenerate(function(err) {
+            req.session.user = req.body.username;
+            res.redirect('/');
+          });
+        } else {
+          res.send(200, 'wrong password dude');
+          res.redirect('/login');
+        }
+      });
+    } else {
+      res.send(200, 'Username or password is invalid.');
+      res.redirect('/login');
+    }
+  });
+});
 
-  res.redirect('/login');
+app.get('/links', app.restrict, function(req, res) {
+  Links.reset().fetch().then(function(links) {
+    res.send(200, links.models);
+  });
 });
 
 app.get('/signup', function(req, res) {
@@ -67,16 +89,28 @@ app.post('/signup', function(req, res) {
 
   new User({ username: req.body.username }).fetch().then(function(found) {
     if (found) {
-      res.send(200, "Username already exists.");
+      res.send(200, 'Username already exists.');
     } else {
+      if (req.body.username === '' ||
+          req.body.password === '' ||
+          req.body.username.length > 40 ||
+          req.body.password.length > 40) {
+        throw new Error('Invalid Username/Password');
+      }
       Users.create({
         username: req.body.username,
         password: req.body.password,
       })
       .then(function(newUser) {
-        res.send(200, "New user created");
+        req.session.regenerate(function(err) {
+          req.session.user = req.body.username;
+          res.redirect('/');
+        });
       });
     }
+  }).catch(function(err) {
+    console.log(err);
+    res.status(500).send(err.message);
   });
 });
 
