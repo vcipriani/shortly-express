@@ -3,6 +3,9 @@ var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+var config = require('./config');
+var request = require('request');
+var qs = require('query-string');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -12,6 +15,11 @@ var Link = require('./app/models/link');
 var Click = require('./app/models/click');
 
 var app = express();
+
+var redirectUri = 'http://localhost:4568/githubLogin';
+
+// var state = 'lasvlnasdf';
+var gitHubUrl = 'https://github.com/login/oauth/authorize?client_id='+config.clientId;
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
@@ -45,6 +53,30 @@ app.get('/create', app.restrict, function(req, res) {
   res.render('index');
 });
 
+app.get('/githubLogin', function(req, res) {
+  var postParams =  {
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    code: req.query.code
+  };
+
+  request.post({url: 'https://github.com/login/oauth/access_token', form:postParams}, 
+    function(err, httpResponse, body) {
+      var accessToken = qs.parse(body).access_token;
+      //Set session to logged in
+      if (accessToken) {
+        req.session.regenerate(function(err) {
+          req.session.user = 'temporary';
+          res.redirect('/');
+        });
+      } else {
+        res.send(200, 'oauth issues dude');
+        res.redirect('/login');
+      }
+    }
+  );
+});
+
 app.get('/login', function(req, res) {
   req.session.destroy(function(err) {
     console.log(err);
@@ -53,24 +85,25 @@ app.get('/login', function(req, res) {
 });
 
 app.post('/login', function(req, res) {
-  new User({ username: req.body.username }).fetch().then(function(foundUser) {
-    if (foundUser) {
-      foundUser.isSamePw(req.body.password).then(function(correctPw) {
-        if (correctPw) {
-          req.session.regenerate(function(err) {
-            req.session.user = req.body.username;
-            res.redirect('/');
-          });
-        } else {
-          res.send(200, 'wrong password dude');
-          res.redirect('/login');
-        }
-      });
-    } else {
-      res.send(200, 'Username or password is invalid.');
-      res.redirect('/login');
-    }
-  });
+  res.redirect(gitHubUrl);
+  // new User({ username: req.body.username }).fetch().then(function(foundUser) {
+  //   if (foundUser) {
+  //     foundUser.isSamePw(req.body.password).then(function(correctPw) {
+  //       if (correctPw) {
+  //         req.session.regenerate(function(err) {
+  //           req.session.user = req.body.username;
+  //           res.redirect('/');
+  //         });
+  //       } else {
+  //         res.send(200, 'wrong password dude');
+  //         res.redirect('/login');
+  //       }
+  //     });
+  //   } else {
+  //     res.send(200, 'Username or password is invalid.');
+  //     res.redirect('/login');
+  //   }
+  // });
 });
 
 app.get('/links', app.restrict, function(req, res) {
@@ -145,7 +178,6 @@ function(req, res) {
     }
   });
 });
-
 
 
 /************************************************************/
