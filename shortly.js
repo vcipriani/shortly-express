@@ -63,11 +63,37 @@ app.get('/githubLogin', function(req, res) {
   request.post({url: 'https://github.com/login/oauth/access_token', form:postParams}, 
     function(err, httpResponse, body) {
       var accessToken = qs.parse(body).access_token;
-      //Set session to logged in
       if (accessToken) {
-        req.session.regenerate(function(err) {
-          req.session.user = 'temporary';
-          res.redirect('/');
+        var login;
+        var id;
+        var getParams = {
+          uri:'https://api.github.com/user?access_token='+accessToken,
+          method: 'GET',
+          headers: {'User-Agent': 'Shortly App'}
+        };
+
+        request(getParams, function(error, response, body) {
+          login = JSON.parse(body).login;
+          id = JSON.parse(body).id;
+          new User({ githubLogin: login}).fetch().then(function(foundUser) {
+            if (foundUser) {
+              req.session.regenerate(function(err) {
+                req.session.user = login;
+                res.redirect('/');
+              });              
+            } else {
+              Users.create({
+                githubLogin: login,
+                githubId: id,
+              })
+              .then(function(newUser) {
+                req.session.regenerate(function(err) {
+                  req.session.user = login;
+                  res.redirect('/');
+                });
+              });  
+            }
+          });
         });
       } else {
         res.send(200, 'oauth issues dude');
@@ -117,34 +143,33 @@ app.get('/signup', function(req, res) {
 });
 
 app.post('/signup', function(req, res) {
-  //username/pw are keys on obj
-  // console.log(req.body);
+  res.redirect(gitHubUrl);
 
-  new User({ username: req.body.username }).fetch().then(function(found) {
-    if (found) {
-      res.send(200, 'Username already exists.');
-    } else {
-      if (req.body.username === '' ||
-          req.body.password === '' ||
-          req.body.username.length > 40 ||
-          req.body.password.length > 40) {
-        throw new Error('Invalid Username/Password');
-      }
-      Users.create({
-        username: req.body.username,
-        password: req.body.password,
-      })
-      .then(function(newUser) {
-        req.session.regenerate(function(err) {
-          req.session.user = req.body.username;
-          res.redirect('/');
-        });
-      });
-    }
-  }).catch(function(err) {
-    console.log(err);
-    res.status(500).send(err.message);
-  });
+  // new User({ username: req.body.username }).fetch().then(function(found) {
+  //   if (found) {
+  //     res.send(200, 'Username already exists.');
+  //   } else {
+  //     if (req.body.username === '' ||
+  //         req.body.password === '' ||
+  //         req.body.username.length > 40 ||
+  //         req.body.password.length > 40) {
+  //       throw new Error('Invalid Username/Password');
+  //     }
+  //     Users.create({
+  //       username: req.body.username,
+  //       password: req.body.password,
+  //     })
+  //     .then(function(newUser) {
+  //       req.session.regenerate(function(err) {
+  //         req.session.user = req.body.username;
+  //         res.redirect('/');
+  //       });
+  //     });
+  //   }
+  // }).catch(function(err) {
+  //   console.log(err);
+  //   res.status(500).send(err.message);
+  // });
 });
 
 app.post('/links', 
